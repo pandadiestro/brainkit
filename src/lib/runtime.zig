@@ -132,3 +132,18 @@ pub const Runtime = struct {
     }
 };
 
+pub fn writeProg(writer: std.io.AnyWriter, program: *std.ArrayList(bytec.BfBytecodeOp)) !void {
+    const head_usize = try writer.write(&.{'B', 'F'});
+    if (head_usize != 2) {
+        unreachable;
+    }
+
+    for (0..program.items.len) |index| {
+        if (program.items[index].arg) |arg| {
+            try writer.writeInt(u64, arg, .little);
+        }
+
+        try writer.writeByte(@intFromEnum(program.items[index].raw_op));
+    }
+}
+

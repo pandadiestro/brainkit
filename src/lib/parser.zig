@@ -3,7 +3,7 @@ const errc = @import("error.zig");
 const bytec = @import("bytecode.zig");
 
 pub const ParseErr = error {
-    ErrCompfail,
+    ErrCompilationfail,
 };
 
 pub const BfParser = struct {
@@ -17,14 +17,12 @@ pub const BfParser = struct {
     // additional parsing context
     braces_index: std.ArrayList(usize),
 
-    pub fn init(reader: std.io.AnyReader) !Self {
-        const new_alloc = std.heap.page_allocator;
-
+    pub fn init(alloc: std.mem.Allocator, reader: std.io.AnyReader) !Self {
         return Self{
-            .alloc = new_alloc,
+            .alloc = alloc,
             .reader = reader,
-            .program = std.ArrayList(bytec.BfBytecodeOp).init(new_alloc),
-            .braces_index = std.ArrayList(usize).init(new_alloc),
+            .program = std.ArrayList(bytec.BfBytecodeOp).init(alloc),
+            .braces_index = std.ArrayList(usize).init(alloc),
         };
     }
 
@@ -37,29 +35,27 @@ pub const BfParser = struct {
         for (0..slice.len) |index| {
             var tr_instr = bytec.fromByte(slice[index]) orelse continue;
 
-            handlebrace: {
-                switch (tr_instr.raw_op) {
-                    .JmpO => {
-                        try self.braces_index.append(self.program.items.len);
-                    },
+            switch (tr_instr.raw_op) {
+                .JmpO => {
+                    try self.braces_index.append(self.program.items.len);
+                },
 
-                    .JmpC => {
-                        const whereat = self.braces_index.popOrNull() orelse {
-                            errc.handleErrWithCtx(&.{
-                                .window = slice,
-                                .offset = index,
-                                .message = "closed a jmp without opening it first"
-                            });
+                .JmpC => {
+                    const whereat = self.braces_index.popOrNull() orelse {
+                        errc.handleErrWithCtx(&.{
+                            .window = slice,
+                            .offset = index,
+                            .message = "closed a jmp without opening it first"
+                        });
 
-                            return ParseErr.ErrCompfail;
-                        };
+                        return ParseErr.ErrCompilationfail;
+                    };
 
-                        self.program.items[whereat].arg = self.program.items.len;
-                        tr_instr.arg = whereat;
-                    },
+                    self.program.items[whereat].arg = self.program.items.len;
+                    tr_instr.arg = whereat;
+                },
 
-                    else => break :handlebrace,
-                }
+                else => {},
             }
 
             try self.program.append(tr_instr);
@@ -77,7 +73,7 @@ pub const BfParser = struct {
                         .message = "you smelly buffoon, you didn't close your jmp",
                     });
 
-                    return ParseErr.ErrCompfail;
+                    return ParseErr.ErrCompilationfail;
                 }
                 return;
             }

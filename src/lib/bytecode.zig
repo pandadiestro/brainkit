@@ -16,4 +16,3 @@ pub fn fromByte(byte: u8) ?BfBytecodeOp {
     }
 }
 
-
